@@ -1,0 +1,17 @@
+node_modules/
+artifacts/
+cache/
+coverage/
+coverage.json
+typechain-types/
+
+# Next.js
+frontend/.next/
+frontend/out/
+frontend/node_modules/
+
+# misc
+.DS_Store
+*.log
+.env
+.env.local
