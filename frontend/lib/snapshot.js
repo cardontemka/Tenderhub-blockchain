@@ -1,7 +1,9 @@
-// Reads a full picture of a TenderHub instance for the dashboard.
+// Reads a full v2 picture of a TenderHub instance for the dashboard.
 const DOC_ID_BASE = 1_000_000_000n;
 
 export async function loadSnapshot(c, accounts) {
+  const watchers = accounts.map((a) => a.address);
+
   const [
     client,
     contractor,
@@ -10,24 +12,31 @@ export async function loadSnapshot(c, accounts) {
     pendingContractor,
     pendingArbiter,
     contractorApprovedArbiter,
-    collateralConfirmed,
     status,
     frozen,
     activatedAt,
     escrowAccount,
     escrowBalance,
+    escrowReserve,
+    escrowDebt,
     totalFinancing,
-    advanceId,
     milestoneCount,
     currentMilestone,
+    collateralTokenId,
     nextTokenId,
     nextDocId,
     contractDocId,
     disputeActive,
     activeDisputeId,
-    amendmentPending,
-    amendmentProposer,
-    amendmentApproved,
+    amendState,
+    amendProposer,
+    deliveryRejected,
+    cancelRequested,
+    cancelRequester,
+    cancelRefused,
+    penaltyPerDay,
+    warrantyDays,
+    completedAt,
   ] = await Promise.all([
     c.client(),
     c.contractor(),
@@ -36,29 +45,35 @@ export async function loadSnapshot(c, accounts) {
     c.pendingContractor(),
     c.pendingArbiter(),
     c.contractorApprovedArbiter(),
-    c.collateralConfirmed(),
     c.status(),
     c.frozen(),
     c.activatedAt(),
     c.escrowAccount(),
     c.escrowBalance(),
+    c.escrowReserve(),
+    c.escrowDebt(),
     c.totalFinancing(),
-    c.advanceId(),
     c.milestoneCount(),
     c.currentMilestone(),
+    c.collateralTokenId(),
     c.nextTokenId(),
     c.nextDocId(),
     c.contractDocId(),
     c.disputeActive(),
     c.activeDisputeId(),
-    c.amendmentPending(),
-    c.amendmentProposer(),
-    c.amendmentApproved(),
+    c.amendState(),
+    c.amendProposer(),
+    c.deliveryRejected(),
+    c.cancelRequested(),
+    c.cancelRequester(),
+    c.cancelRefused(),
+    c.penaltyPerDay(),
+    c.warrantyDays(),
+    c.completedAt(),
   ]);
 
-  // Financing / fee tranches: ids 1 .. nextTokenId-1
+  // tranches 1..nextTokenId-1 with per-watcher balances
   const tranches = [];
-  const watchers = accounts.map((a) => a.address);
   for (let id = 1n; id < nextTokenId; id++) {
     const t = await c.tranches(id);
     const balances = {};
@@ -71,7 +86,7 @@ export async function loadSnapshot(c, accounts) {
       id,
       kind: Number(t.kind),
       amount: t.amount,
-      deadlineOffset: t.deadlineOffset,
+      deadlineDays: t.deadlineDays,
       entitled: t.entitled,
       delivered: t.delivered,
       beneficiary: t.beneficiary,
@@ -79,13 +94,15 @@ export async function loadSnapshot(c, accounts) {
     });
   }
 
-  // Milestone ids in order
+  // milestone ids + effective deadlines
   const milestoneIds = [];
+  const deadlines = [];
   for (let i = 0n; i < milestoneCount; i++) {
     milestoneIds.push(await c.milestoneIds(i));
+    deadlines.push(await c.effectiveDeadline(i));
   }
 
-  // Document NFTs: ids DOC_ID_BASE .. nextDocId-1
+  // documents
   const documents = [];
   for (let id = DOC_ID_BASE; id < nextDocId; id++) {
     const d = await c.documents(id);
@@ -99,7 +116,7 @@ export async function loadSnapshot(c, accounts) {
     });
   }
 
-  // Loans
+  // loans
   const loanCount = await c.loanCount();
   const loans = [];
   for (let i = 0n; i < loanCount; i++) {
@@ -107,31 +124,24 @@ export async function loadSnapshot(c, accounts) {
     loans.push({
       id: i,
       lender: l.lender,
-      tokenId: l.tokenId,
       requestedAmount: l.requestedAmount,
       collateralAmount: l.collateralAmount,
-      termsDocId: l.termsDocId,
-      contractDocId: l.contractDocId,
-      lenderBank: l.lenderBank,
       state: Number(l.state),
-      contractorAccepted: l.contractorAccepted,
-      clientApproved: l.clientApproved,
     });
   }
 
-  // Disputes
+  // disputes
   const disputeCount = await c.disputeCount();
   const disputes = [];
   for (let i = 0n; i < disputeCount; i++) {
     const d = await c.disputes(i);
     disputes.push({
       id: i,
+      subject: Number(d.subject),
       initiator: d.initiator,
       arbiter: d.arbiter,
       feeTokenId: d.feeTokenId,
       feeAmount: d.feeAmount,
-      complaintDocId: d.complaintDocId,
-      rulingDocId: d.rulingDocId,
       winner: d.winner,
       rulingTime: d.rulingTime,
       state: Number(d.state),
@@ -140,7 +150,7 @@ export async function loadSnapshot(c, accounts) {
     });
   }
 
-  // Redemptions
+  // redemptions + per-holder consent
   const redemptionCount = await c.redemptionCount();
   const redemptions = [];
   for (let i = 0n; i < redemptionCount; i++) {
@@ -163,26 +173,35 @@ export async function loadSnapshot(c, accounts) {
     pendingContractor,
     pendingArbiter,
     contractorApprovedArbiter,
-    collateralConfirmed,
     status: Number(status),
     frozen,
     activatedAt,
     escrowAccount,
     escrowBalance,
+    escrowReserve,
+    escrowDebt,
     totalFinancing,
-    advanceId,
     milestoneIds,
+    deadlines,
     currentMilestone,
+    collateralTokenId,
     contractDocId,
     disputeActive,
     activeDisputeId,
-    amendmentPending,
-    amendmentProposer,
-    amendmentApproved,
+    amendState: Number(amendState),
+    amendProposer,
+    deliveryRejected,
+    cancelRequested,
+    cancelRequester,
+    cancelRefused,
+    penaltyPerDay,
+    warrantyDays,
+    completedAt,
     tranches,
     documents,
     loans,
     disputes,
     redemptions,
+    snapshotAt: Date.now(), // wall-clock at read time (used to freeze the timer when paused)
   };
 }

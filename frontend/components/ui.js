@@ -57,13 +57,17 @@ export function Area({ label, value, onChange, placeholder }) {
   );
 }
 
-export function AddressSelect({ label, value, onChange, accounts }) {
+export function AddressSelect({ label, value, onChange, accounts, exclude = [] }) {
+  const ex = exclude
+    .filter(Boolean)
+    .map((a) => a.toLowerCase());
+  const options = accounts.filter((a) => !ex.includes(a.address.toLowerCase()));
   return (
     <div style={{ flex: 1, minWidth: 200 }}>
       {label && <label>{label}</label>}
       <select value={value} onChange={(e) => onChange(e.target.value)}>
         <option value="">— сонгох —</option>
-        {accounts.map((a) => (
+        {options.map((a) => (
           <option key={a.address} value={a.address}>
             {a.role} · {a.address.slice(0, 8)}…
           </option>
